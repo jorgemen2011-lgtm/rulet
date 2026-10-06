@@ -1,0 +1,10 @@
+{
+  "extends": ["//"],
+  "tags": ["app"],
+  "tasks": {
+    "test:e2e": {
+      "cache": false,
+      "passThroughEnv": ["TEST_DATABASE_URL"]
+    }
+  }
+}

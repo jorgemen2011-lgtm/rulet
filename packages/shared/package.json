@@ -6,11 +6,14 @@
   "types": "./src/index.ts",
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . --max-warnings=0"
   },
   "devDependencies": {
+    "@rulet/eslint-config": "workspace:*",
     "@rulet/tsconfig": "workspace:*",
-    "typescript": "^5.8.0"
+    "eslint": "^10.12.0",
+    "typescript": "~6.0.0"
   },
   "exports": {
     ".": {
@@ -18,5 +21,12 @@
       "node": "./dist/index.js",
       "default": "./src/index.ts"
     }
-  }
+  },
+  "dependencies": {
+    "zod": "^4.6.5"
+  },
+  "files": [
+    "dist",
+    "src"
+  ]
 }

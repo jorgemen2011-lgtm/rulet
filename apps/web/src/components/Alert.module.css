@@ -1,0 +1,20 @@
+.alert {
+  margin: 0;
+  padding: var(--space-md);
+  border: 1px solid var(--color-border);
+  border-left-width: 4px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.error {
+  border-left-color: var(--color-danger);
+}
+
+.info {
+  border-left-color: var(--color-primary);
+}
+
+.success {
+  border-left-color: var(--color-success);
+}

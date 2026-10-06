@@ -1,0 +1,36 @@
+# Contexto de build de las imágenes (se construyen desde la raíz). Fuera todo lo que no hace falta y,
+# sobre todo, cualquier secreto: lo que entra en el contexto puede acabar en una capa de la imagen.
+**/node_modules
+**/dist
+**/.next
+**/.expo
+**/.turbo
+**/coverage
+**/*.log
+**/*.tsbuildinfo
+
+# Secretos y configuración local
+**/.env
+**/.env.*
+!**/.env.example
+**/*.pem
+**/*.key
+**/*.crt
+**/*.p8
+**/*.p12
+**/*.pfx
+**/*.jks
+**/*.mobileprovision
+**/secrets
+
+# Git, CI, editores y entornos de desarrollo
+.git
+.github
+.husky
+.devcontainer
+.vscode
+.idea
+**/.DS_Store
+
+# La app móvil no forma parte de ninguna imagen de servidor
+apps/mobile

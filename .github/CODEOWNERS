@@ -1,0 +1,19 @@
+# Revisores obligatorios por ruta (con la protección de rama "Require review from Code Owners").
+# La última regla que coincide gana: las rutas sensibles se declaran después de la regla por defecto.
+
+# Por defecto
+*                                   @jorgemen2011-lgtm
+
+# Seguridad: autenticación, guards/decoradores/middleware comunes y contratos entre API y clientes
+/apps/api/src/modules/auth/         @jorgemen2011-lgtm
+/apps/api/src/common/               @jorgemen2011-lgtm
+/packages/shared/src/contracts/     @jorgemen2011-lgtm
+
+# Base de datos: esquema y migraciones
+/apps/api/src/database/             @jorgemen2011-lgtm
+/apps/api/drizzle/                  @jorgemen2011-lgtm
+
+# CI/CD, publicación de imágenes y política de seguridad
+/.github/                           @jorgemen2011-lgtm
+/SECURITY.md                        @jorgemen2011-lgtm
+/apps/*/Dockerfile                  @jorgemen2011-lgtm

@@ -1,0 +1,32 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 10
+    # Espera unos días antes de proponer una versión recién publicada: los paquetes comprometidos
+    # (supply chain) suelen detectarse y retirarse en ese margen. Los parches de seguridad no esperan.
+    cooldown: { default-days: 3 }
+    commit-message: { prefix: 'build(deps)' }
+    groups:
+      nestjs: { patterns: ['@nestjs/*'] }
+      expo: { patterns: ['expo', 'expo-*', 'react-native', 'react-native-*'] }
+      next: { patterns: ['next', '@next/*'] }
+      lint: { patterns: ['eslint', 'eslint-*', '@eslint/*', 'typescript-eslint', 'prettier'] }
+
+  # Las actions van fijadas a SHA: Dependabot actualiza el SHA y el comentario de versión.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: monthly }
+    cooldown: { default-days: 3 }
+    commit-message: { prefix: 'ci(deps)' }
+    groups:
+      actions: { patterns: ['*'] }
+
+  # Imágenes base de los Dockerfile (node:24-alpine), fijadas por digest: Dependabot propone el digest nuevo
+  # (y el tag si cambia). No toca la directiva `# syntax=docker/dockerfile:1@sha256:…`: se actualiza a mano con
+  #   docker buildx imagetools inspect docker/dockerfile:1 --format '{{.Manifest.Digest}}'
+  - package-ecosystem: docker
+    directories: [/apps/api, /apps/web]
+    schedule: { interval: weekly }
+    commit-message: { prefix: 'build(deps)' }

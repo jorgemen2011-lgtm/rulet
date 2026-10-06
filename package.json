@@ -10,10 +10,36 @@
     "build": "turbo run build",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
-    "test": "turbo run test"
+    "test": "turbo run test",
+    "test:e2e": "turbo run test:e2e",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "boundaries": "turbo boundaries",
+    "gen": "turbo gen",
+    "check": "turbo run lint typecheck test && pnpm format:check && pnpm boundaries",
+    "prepare": "husky || true",
+    "audit:prod": "pnpm audit --prod --audit-level=high"
   },
   "devDependencies": {
+    "@commitlint/cli": "^21.2.3",
+    "@commitlint/config-conventional": "^21.2.3",
+    "@turbo/gen": "^2.11.7",
+    "eslint": "^10.12.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.6.0",
+    "prettier": "^3.9.9",
     "turbo": "^2.5.0",
-    "typescript": "^5.8.0"
+    "typescript": "~6.0.0"
+  },
+  "pnpm": {
+    "auditConfig": {
+      "ignoreGhsas": [
+        "GHSA-86w9-cpqp-85rv",
+        "GHSA-vfj7-8cjw-p6xm"
+      ]
+    }
+  },
+  "engines": {
+    "node": ">=24"
   }
 }

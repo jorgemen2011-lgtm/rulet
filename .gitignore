@@ -18,15 +18,26 @@ android/
 *.key
 *.mobileprovision
 
-# Env
+# Env y secretos (nunca se commitean; los .env.example son la referencia)
 .env
 .env.*
 !.env.example
+*.pem
+*.crt
+*.pfx
+secrets/
+
+# Informes de escáneres de seguridad
+*.sarif
+gitleaks-report.*
+trivy-results.*
 
 # OS / IDE
 .DS_Store
 .idea/
 .vscode/*
 !.vscode/extensions.json
+!.vscode/settings.json
 *.log
 *.tsbuildinfo
+next-env.d.ts

@@ -1,0 +1,4 @@
+{
+  "extends": "@rulet/tsconfig/library.json",
+  "include": ["src"]
+}

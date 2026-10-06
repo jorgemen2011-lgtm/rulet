@@ -1,0 +1,137 @@
+# Publicación de imágenes en GitHub Container Registry (ghcr.io/<owner>/rulet-api y rulet-web).
+#
+# Se dispara con cada push a `main`, pero solo DESPUÉS de que el workflow CI termine en verde para ese
+# commit (`workflow_run`). Esta imagen se construye de nuevo (en otro runner y con otra NEXT_PUBLIC_API_URL),
+# así que el escaneo de CI no la cubre: se sube primero solo con `sha-<commit>`, Trivy escanea ESE digest y
+# solo si pasa se atesta y se mueve `latest` a él. Así nunca se publica como `latest` una imagen que no pasó
+# tests ni Trivy. Si Trivy falla, queda `sha-<commit>` sin atestación y `latest` sigue en la anterior.
+# Cada imagen sale con procedencia SLSA (mode=max), SBOM y una atestación firmada con Sigstore verificable con:
+#   gh attestation verify oci://ghcr.io/<owner>/rulet-api:sha-<commit> --owner <owner>
+#
+# Requisito: variable de repositorio `NEXT_PUBLIC_API_URL` (Settings → Secrets and variables → Actions
+# → Variables) con el origen público de la API de producción; se incrusta en el bundle de la web.
+name: Release
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+# Publicaciones en serie y sin cancelar: una imagen a medio subir es peor que una cola.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  publish:
+    name: Publicar ${{ matrix.app }}
+    # Solo CI en verde, originado por un push (no por un PR) en este mismo repositorio.
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write # subir a ghcr.io
+      id-token: write # token OIDC para firmar la atestación con Sigstore (sin claves)
+      attestations: write # guardar la atestación en el repositorio
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [api, web]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # El commit exacto que validó CI, no la punta actual de main.
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+
+      - name: Nombre de la imagen
+        id: image
+        env:
+          OWNER: ${{ github.repository_owner }}
+          APP: ${{ matrix.app }}
+          API_URL: ${{ vars.NEXT_PUBLIC_API_URL }}
+        run: |
+          # Los nombres de imagen OCI deben ir en minúsculas.
+          echo "name=ghcr.io/${OWNER,,}/rulet-${APP}" >> "$GITHUB_OUTPUT"
+          if [ "$APP" = web ] && [ -z "$API_URL" ]; then
+            echo "::error::Falta la variable de repositorio NEXT_PUBLIC_API_URL (origen de la API de producción)."
+            exit 1
+          fi
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Metadatos (tags y labels OCI)
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          # `git`: toma el SHA del checkout (el de CI) en lugar del contexto del evento `workflow_run`.
+          context: git
+          images: ${{ steps.image.outputs.name }}
+          # Solo el tag inmutable: `latest` se mueve al final, cuando la imagen ya pasó Trivy.
+          tags: type=sha,format=long
+
+      - name: Build y push
+        id: push
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: apps/${{ matrix.app }}/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL }}
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.app }}
+
+      # Se escanea la imagen publicada por su digest (no por tag): exactamente lo que se atesta y se despliega.
+      # Trivy reutiliza las credenciales de `docker login` para leer de ghcr.io.
+      - name: Escaneo de vulnerabilidades (Trivy)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ steps.image.outputs.name }}@${{ steps.push.outputs.digest }}
+          scanners: vuln
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+          # Mismo criterio que CI: solo bloquea lo que tiene parche disponible.
+          ignore-unfixed: true
+          exit-code: '1'
+          format: table
+
+      - name: Atestación de procedencia
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ steps.image.outputs.name }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+          # El registro de almacenamiento exigiría además `artifact-metadata: write`.
+          create-storage-record: false
+
+      # Copia exacta (`--prefer-index=false`) del índice ya escaneado y atestado: `latest` apunta al mismo
+      # digest que `sha-<commit>`. Se comprueba después por si el registro lo reescribiera.
+      - name: Mover latest a la imagen escaneada
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          docker buildx imagetools create --prefer-index=false --tag "$IMAGE:latest" "$IMAGE@$DIGEST"
+          actual="$(docker buildx imagetools inspect "$IMAGE:latest" --format '{{.Manifest.Digest}}')"
+          if [ "$actual" != "$DIGEST" ]; then
+            echo "::error::$IMAGE:latest apunta a $actual en lugar de $DIGEST."
+            exit 1
+          fi

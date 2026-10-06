@@ -1,0 +1,93 @@
+# Entorno local "como en producción": PostgreSQL + migraciones + API + web con las imágenes de producción.
+#
+#   cp .env.example .env             # una vez: define JWT_ACCESS_SECRET (ver .env.example)
+#   docker compose up --build        # API en http://localhost:3000, web en http://localhost:3001
+#   docker compose down              # para; añade -v para borrar también los datos de la BD
+#
+# ⚠️ SOLO PARA DESARROLLO LOCAL. Las credenciales de la BD de este archivo son públicas (están en git) y no
+# deben usarse en ningún entorno desplegado. El secreto JWT no está aquí: compose lo toma del `.env` de la
+# raíz (no versionado), porque la API arranca con NODE_ENV=production y rechaza secretos de ejemplo.
+# En producción todo se inyecta desde el gestor de secretos de la plataforma y la conexión a la BD va con
+# TLS (DATABASE_SSL=true).
+
+x-api-image: &api-image
+  build: { context: ., dockerfile: apps/api/Dockerfile }
+  image: rulet-api:local
+
+# Endurecimiento común de los contenedores de la app (no del de la BD, que necesita escribir y cambiar de usuario).
+x-hardening: &hardening
+  security_opt: ['no-new-privileges:true']
+  cap_drop: [ALL]
+
+x-database-env: &database-env
+  DATABASE_URL: postgres://rulet:rulet@db:5432/rulet
+  # Tráfico dentro de la red privada de compose y sin certificados: TLS desactivado de forma EXPLÍCITA
+  # (la API exige este escape para aceptar DATABASE_SSL=false con NODE_ENV=production).
+  DATABASE_SSL: 'false'
+  DATABASE_SSL_ALLOW_INSECURE: 'true'
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      # Credenciales SOLO de desarrollo local.
+      POSTGRES_USER: rulet
+      POSTGRES_PASSWORD: rulet
+      POSTGRES_DB: rulet
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      # Crea también la BD de los e2e (rulet_test), igual que el Dev Container.
+      - ./.devcontainer/init-test-db.sql:/docker-entrypoint-initdb.d/10-init-test-db.sql:ro
+    # Publicado solo en el loopback: no accesible desde otras máquinas de la red.
+    ports: ['127.0.0.1:5432:5432']
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U rulet -d rulet']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Paso one-shot: aplica las migraciones y termina. La API no arranca hasta que acaba bien.
+  migrate:
+    <<: [*api-image, *hardening]
+    command: ['node', 'dist/database/migrate.js']
+    environment:
+      NODE_ENV: production
+      <<: *database-env
+    read_only: true
+    restart: 'no'
+    depends_on:
+      db: { condition: service_healthy }
+
+  api:
+    <<: [*api-image, *hardening]
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      <<: *database-env
+      # Del `.env` local (≥ 32 caracteres, aleatorio). Sin él, compose se niega a arrancar.
+      # Sin `:?` a propósito: así `docker compose up db` funciona sin .env. Si falta, la API no arranca y su
+      # validación de entorno explica el motivo (mínimo 32 caracteres, nunca un valor de ejemplo).
+      JWT_ACCESS_SECRET: '${JWT_ACCESS_SECRET:-}'
+      CORS_ORIGINS: http://localhost:3001
+      # Escape explícito: en producción la API solo admite orígenes localhost con esta variable.
+      ALLOW_LOCALHOST_CORS: 'true'
+      # La API recibe el tráfico directamente (puerto publicado), sin proxy delante: no se confía en X-Forwarded-For.
+      TRUST_PROXY: 'false'
+      # HTTP local: las cookies `Secure`/`__Host-` no se enviarían sin HTTPS.
+      COOKIE_SECURE: 'false'
+    read_only: true
+    ports: ['127.0.0.1:3000:3000']
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  web:
+    <<: *hardening
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args: { NEXT_PUBLIC_API_URL: http://localhost:3000 }
+    ports: ['127.0.0.1:3001:3001']
+    depends_on: [api]
+
+volumes:
+  db-data:
