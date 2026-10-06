@@ -1,7 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { HealthResponseSchema } from '@rulet/shared';
-import { AppConfigModule } from '../../config/config.module';
-import { HealthController } from './health.controller';
+import { AppConfigModule } from '../../config/config.module.js';
+import { HealthController } from './health.controller.js';
 
 describe('HealthController', () => {
   it('cumple el contrato HealthResponse', async () => {

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Env } from './env';
+import { Env } from './env.js';
 
 /** Acceso tipado a la configuración ya validada. Inyecta este servicio, nunca `process.env`. */
 @Injectable()

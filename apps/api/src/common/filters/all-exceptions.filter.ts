@@ -1,7 +1,7 @@
 import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus, Logger } from '@nestjs/common';
 import type { ApiErrorResponse } from '@rulet/shared';
 import type { Request, Response } from 'express';
-import { REQUEST_ID_HEADER } from '../middleware/request-id.middleware';
+import { REQUEST_ID_HEADER } from '../middleware/request-id.middleware.js';
 
 /**
  * Convierte cualquier excepción en la forma `ApiErrorResponse` de @rulet/shared.

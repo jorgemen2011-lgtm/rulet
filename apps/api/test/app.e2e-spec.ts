@@ -3,9 +3,9 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
 import { ApiErrorResponseSchema, HealthResponseSchema } from '@rulet/shared';
 import request from 'supertest';
-import { AppModule } from '../src/app.module';
-import { setupApp } from '../src/app.setup';
-import { RequireFeature } from '../src/common/guards/feature.guard';
+import { AppModule } from '../src/app.module.js';
+import { setupApp } from '../src/app.setup.js';
+import { RequireFeature } from '../src/common/guards/feature.guard.js';
 
 @Controller('admin-probe')
 @RequireFeature('adminPanel')

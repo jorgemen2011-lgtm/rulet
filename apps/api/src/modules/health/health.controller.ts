@@ -1,7 +1,7 @@
 import { Controller, Get, VERSION_NEUTRAL } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
 import type { HealthResponse } from '@rulet/shared';
-import { AppConfigService } from '../../config/app-config.service';
+import { AppConfigService } from '../../config/app-config.service.js';
 
 /** Sonda de salud para el balanceador/orquestador. Fuera del versionado: `GET /health`. */
 @SkipThrottle()

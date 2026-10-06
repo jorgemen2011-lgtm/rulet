@@ -1,12 +1,12 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
-import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
-import { FeatureGuard } from './common/guards/feature.guard';
-import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
-import { AppConfigService } from './config/app-config.service';
-import { AppConfigModule } from './config/config.module';
-import { HealthModule } from './modules/health/health.module';
+import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
+import { FeatureGuard } from './common/guards/feature.guard.js';
+import { RequestIdMiddleware } from './common/middleware/request-id.middleware.js';
+import { AppConfigService } from './config/app-config.service.js';
+import { AppConfigModule } from './config/config.module.js';
+import { HealthModule } from './modules/health/health.module.js';
 
 @Module({
   imports: [

@@ -1,14 +1,15 @@
 {
   "extends": "@rulet/tsconfig/base.json",
   "compilerOptions": {
-    "module": "CommonJS",
-    "moduleResolution": "Node",
-    "isolatedModules": false,
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "target": "ES2023",
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
-    "outDir": "dist",
-    "baseUrl": "./",
-    "sourceMap": true
+    "strictPropertyInitialization": false,
+    "outDir": "./dist",
+    "sourceMap": true,
+    "types": ["vitest/globals", "node"]
   },
-  "include": ["src", "test"]
+  "include": ["src", "test", "vitest.config*.ts", "drizzle.config.ts"]
 }

@@ -2,7 +2,7 @@ import { CanActivate, ExecutionContext, ForbiddenException, Injectable, SetMetad
 import { Reflector } from '@nestjs/core';
 import { Feature, isFeatureAvailable } from '@rulet/shared';
 import type { Request } from 'express';
-import { platformFromRequest } from '../decorators/client-platform.decorator';
+import { platformFromRequest } from '../decorators/client-platform.decorator.js';
 
 const FEATURE_KEY = 'rulet:feature';
 

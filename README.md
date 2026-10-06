@@ -28,7 +28,7 @@ Lee la [arquitectura](./docs/architecture.md) para la visión completa.
 
 ## Puesta en marcha
 
-Requisitos: Node 22 (`.nvmrc`) y pnpm 10 (`corepack enable`).
+Requisitos: Node 24 LTS (`.nvmrc`) y pnpm 10 (`corepack enable`).
 
 ```bash
 pnpm install

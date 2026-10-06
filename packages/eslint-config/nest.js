@@ -5,7 +5,7 @@ import base from './base.js';
 export default [
   ...base,
   {
-    languageOptions: { globals: { ...globals.node, ...globals.jest } },
+    languageOptions: { globals: { ...globals.node } },
     rules: {
       // Nest necesita las importaciones de valor para la inyección de dependencias por metadatos.
       '@typescript-eslint/consistent-type-imports': 'off',

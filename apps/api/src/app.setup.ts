@@ -1,7 +1,7 @@
 import { ConsoleLogger, VersioningType } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
-import { AppConfigService } from './config/app-config.service';
+import { AppConfigService } from './config/app-config.service.js';
 
 /**
  * Configuración HTTP de la aplicación. Se comparte entre `main.ts` y los tests e2e

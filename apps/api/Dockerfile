@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # Construir desde la raíz del monorepo:  docker build -f apps/api/Dockerfile -t rulet-api .
 
-FROM node:22-alpine AS base
+FROM node:24-alpine AS base
 ENV PNPM_HOME=/pnpm PATH=/pnpm:$PATH TURBO_TELEMETRY_DISABLED=1
 RUN corepack enable
 WORKDIR /repo
@@ -15,7 +15,7 @@ RUN pnpm turbo run build --filter=@rulet/api
 RUN pnpm deploy --filter=@rulet/api --prod --legacy /out
 
 # --- Imagen final mínima ---
-FROM node:22-alpine AS runtime
+FROM node:24-alpine AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 COPY --from=build --chown=node:node /out ./
