@@ -5,12 +5,15 @@
 Rulet se despliega de forma continua desde `main`: solo la última versión publicada recibe correcciones de
 seguridad.
 
-| Componente                   | Versión soportada                                     |
-| ---------------------------- | ----------------------------------------------------- |
-| API (`ghcr.io/…/rulet-api`)  | La imagen `latest` / último `sha-<commit>` de `main`  |
-| Web (`ghcr.io/…/rulet-web`)  | La imagen `latest` / último `sha-<commit>` de `main`  |
-| App móvil                    | La última versión publicada en tiendas y su canal OTA |
-| Versiones anteriores y ramas | ❌ Sin soporte: actualiza a la última                 |
+Cómo está protegido Rulet, sus riesgos conocidos y las checklists del equipo están en la
+[guía de seguridad](docs/security.md).
+
+| Componente                   | Versión soportada                                                   |
+| ---------------------------- | ------------------------------------------------------------------- |
+| API (`ghcr.io/…/rulet-api`)  | La imagen `latest` / último `sha-<commit>` atestado de `main`       |
+| Web (`ghcr.io/…/rulet-web`)  | La imagen `latest` / último `sha-<commit>` atestado de `main`       |
+| App móvil                    | La última versión publicada en tiendas (no hay actualizaciones OTA) |
+| Versiones anteriores y ramas | ❌ Sin soporte: actualiza a la última                               |
 
 ## Cómo informar de una vulnerabilidad
 
@@ -59,8 +62,12 @@ deseas, te daremos crédito.
 - Ataques de denegación de servicio volumétricos, ingeniería social o ataques físicos.
 - Informes de escáneres automáticos sin prueba de impacto, cabeceras "recomendadas" sin impacto concreto,
   o problemas que requieren un dispositivo ya comprometido (root/jailbreak).
-- Las credenciales de `docker-compose.yml` y `.devcontainer/`: son públicas a propósito y solo sirven para
-  desarrollo local.
+- Las credenciales y secretos de ejemplo versionados (`docker-compose.yml`, `.devcontainer/`, `.env.example`,
+  `.github/workflows/ci.yml`, `apps/api/test/`): son públicos a propósito, solo sirven para desarrollo local y CI,
+  y la API rechaza esos secretos JWT con `NODE_ENV=production`.
+- Los riesgos residuales ya documentados en
+  [docs/security.md § 9](docs/security.md#9-riesgos-residuales-y-trabajo-pendiente), salvo que demuestres un
+  impacto mayor que el descrito allí.
 
 Pedimos que no accedas a datos de otros usuarios, no degrades el servicio y no hagas pruebas contra
 producción más allá de lo mínimo para demostrar el problema. La investigación de buena fe que siga esta
@@ -72,9 +79,14 @@ política no tendrá acciones legales por nuestra parte.
 - **Dependency Review** bloquea PRs que introducen dependencias con vulnerabilidades altas o críticas.
 - **gitleaks** busca secretos en los commits nuevos y, semanalmente, en todo el historial.
 - **`pnpm audit --prod`** (severidad alta o mayor) y **Dependabot** para npm, GitHub Actions y Docker.
-- **Trivy** escanea las imágenes Docker en CI (vulnerabilidades críticas/altas con parche disponible).
-- Las imágenes se publican con SBOM, procedencia SLSA y atestación firmada (Sigstore).
+- **Trivy** escanea las imágenes Docker en CI y, al publicar, la imagen subida por su digest (vulnerabilidades
+  críticas/altas con parche disponible). `latest` solo se mueve a una imagen que lo ha pasado.
+- Las imágenes base y el frontend de BuildKit están fijados por digest; las imágenes se ejecutan sin root.
+- Las imágenes se publican con SBOM, procedencia SLSA y atestación firmada (Sigstore), verificable con
+  `gh attestation verify`.
 - Las GitHub Actions están fijadas a SHA completo y los workflows usan permisos mínimos.
+
+El detalle de cada control está en [docs/security.md § 6](docs/security.md#6-cadena-de-suministro-y-cicd).
 
 ### Excepciones de `pnpm audit`
 

@@ -2,6 +2,9 @@
 
 Cliente HTTP tipado que comparten web y móvil. Cada respuesta se valida contra su contrato de `@rulet/shared`.
 
+Ejemplo mínimo. Las instancias reales están en `apps/web/src/lib/api.ts` y `apps/mobile/src/lib/api.ts`, que reparten
+`onSessionExpired` a varios suscriptores (`subscribeSessionExpired` / `subscribeToSessionExpired`).
+
 ```ts
 // Web: la sesión vive en cookies httpOnly; el cliente nunca ve los tokens.
 const api = createApiClient({
@@ -12,7 +15,7 @@ const api = createApiClient({
 
 // Móvil: los tokens se guardan en el almacén seguro del dispositivo (TokenStore propio, p. ej. expo-secure-store).
 const api = createApiClient({
-  baseUrl: env.EXPO_PUBLIC_API_URL,
+  baseUrl: env.apiUrl, // EXPO_PUBLIC_API_URL validada en src/lib/env.ts
   platform: 'mobile',
   tokenStore: secureTokenStore,
   onSessionExpired: () => router.replace('/login'),
@@ -20,10 +23,34 @@ const api = createApiClient({
 
 const { user } = await api.auth.login({ email, password });
 const me = await api.users.me();
-const items = await api.request(ItemListSchema, '/items?page=2');
+const items = await api.request(ItemListSchema, '/items'); // ruta relativa a /v1
 ```
 
-## API
+## Exportaciones
+
+| Export                                                                                                                 | Qué es                                                                        |
+| ---------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `createApiClient(options)`                                                                                             | Crea el cliente. `options` es `WebApiClientOptions \| MobileApiClientOptions` |
+| `ApiError`, `isApiError`                                                                                               | Error único de comunicación con la API y su type guard                        |
+| `TokenStore`                                                                                                           | Interfaz `get` / `set` / `clear` del almacén de tokens (móvil)                |
+| `createMemoryTokenStore(initial?)`                                                                                     | `TokenStore` en memoria, para tests y procesos efímeros (no persiste)         |
+| `DEFAULT_TIMEOUT_MS`                                                                                                   | `15_000`                                                                      |
+| Tipos `ApiClient`, `ApiClientOptions`, `AuthResult`, `RequestOptions`, `ApiErrorCode`, `ApiErrorOptions`, `HttpMethod` | —                                                                             |
+
+Opciones de `createApiClient`:
+
+| Opción              | Obligatoria    | Notas                                                                                        |
+| ------------------- | -------------- | -------------------------------------------------------------------------------------------- |
+| `baseUrl`           | sí             | Origen de la API sin versión (`https://api.rulet.app`)                                       |
+| `platform`          | sí             | `'web'` o `'mobile'`; se envía en `x-client-platform`                                        |
+| `tokenStore`        | sí en `mobile` | Por tipo y en runtime. En web se ignora. En la app: `secureTokenStore` (`expo-secure-store`) |
+| `onSessionExpired`  | no             | Se llama una vez cuando la API rechaza la renovación                                         |
+| `version`           | no             | `v1` por defecto                                                                             |
+| `timeoutMs`         | no             | Por intento, incluida la lectura del cuerpo                                                  |
+| `allowInsecureHttp` | no             | Permite `http://` hacia hosts no locales. Nunca en producción                                |
+| `fetch`             | no             | Implementación de `fetch` (tests)                                                            |
+
+## Métodos
 
 | Método                            | Ruta                     | Notas                                                                   |
 | --------------------------------- | ------------------------ | ----------------------------------------------------------------------- |
@@ -43,7 +70,8 @@ const items = await api.request(ItemListSchema, '/items?page=2');
   `10.0.2.2` (emulador Android), o con `allowInsecureHttp: true` explícito. También se rechazan credenciales
   embebidas en `baseUrl`.
 - **Rutas relativas**: `request` rechaza rutas absolutas, `//host`, `..`, `\` o `#`, para que la sesión no
-  viaje nunca a otro destino. Las redirecciones no se siguen (`redirect: 'error'`).
+  viaje nunca a otro destino. Las redirecciones no se siguen (`redirect: 'error'`); como React Native ignora esa
+  opción, una respuesta con `res.redirected` se rechaza como `invalid_response`.
 - **Cabeceras gestionadas**: `authorization`, `cookie` y `x-client-platform` las pone el cliente; las que pase el
   llamante con esos nombres se ignoran.
 - **Timeout** por intento (15 s por defecto, `timeoutMs`), incluida la lectura del cuerpo.
@@ -77,14 +105,14 @@ fallido y `onSessionExpired()`.
 
 Todo fallo al hablar con la API es un `ApiError` con `status`, `body` (`ApiErrorResponse` o `null`) y `code`:
 
-| `code`             | `status` | Cuándo                                             |
-| ------------------ | -------- | -------------------------------------------------- |
-| `http`             | 4xx/5xx  | La API respondió con error.                        |
-| `network`          | `0`      | Sin respuesta (offline, DNS, TLS, CORS).           |
-| `timeout`          | `0`      | Superado `timeoutMs`.                              |
-| `aborted`          | `0`      | El llamante abortó con su `signal`.                |
-| `invalid_response` | real     | La respuesta no cumple el contrato (o no es JSON). |
-| `no_session`       | `0`      | `auth.refresh()` en móvil sin tokens guardados.    |
+| `code`             | `status`   | Cuándo                                                                     |
+| ------------------ | ---------- | -------------------------------------------------------------------------- |
+| `http`             | 4xx/5xx    | La API respondió con error.                                                |
+| `network`          | `0`        | Sin respuesta (offline, DNS, TLS, CORS).                                   |
+| `timeout`          | `0`        | Superado `timeoutMs`.                                                      |
+| `aborted`          | `0`        | El llamante abortó con su `signal`.                                        |
+| `invalid_response` | real o `0` | La respuesta no cumple el contrato, no es JSON o es una redirección (`0`). |
+| `no_session`       | `0`        | `auth.refresh()` en móvil sin tokens guardados.                            |
 
 `error.isNetworkError` (red o timeout) y `error.isUnauthorized` ayudan a decidir qué mostrar. Los errores de uso
 (configuración o ruta inválidas) son `Error` normales: son fallos de programación.
@@ -95,5 +123,8 @@ Todo fallo al hablar con la API es un `ApiError` con `status`, `body` (`ApiError
 pnpm --filter @rulet/api-client test
 ```
 
-`fetch` se simula en `src/client.test.ts`; cubren transporte web/móvil, single-flight, expiración de sesión,
-timeout, rechazo de `http://`, logout sin red y validación de respuestas.
+`fetch` se simula en `src/client.test.ts` y `src/hardening.test.ts`; cubren transporte web/móvil, single-flight,
+expiración de sesión, cambios de identidad, timeout, rechazo de `http://` y de rutas inseguras, cabeceras
+reservadas, redirecciones, logout sin red y validación de respuestas.
+
+No hay renovación proactiva por `accessTokenExpiresAt`: la renovación es solo reactiva ante un `401`.

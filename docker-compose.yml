@@ -20,7 +20,7 @@ x-hardening: &hardening
   cap_drop: [ALL]
 
 x-database-env: &database-env
-  DATABASE_URL: postgres://rulet:rulet_local_only@db:5432/rulet
+  DATABASE_URL: postgres://rulet:rulet@db:5432/rulet
   # Tráfico dentro de la red privada de compose y sin certificados: TLS desactivado de forma EXPLÍCITA
   # (la API exige este escape para aceptar DATABASE_SSL=false con NODE_ENV=production).
   DATABASE_SSL: 'false'
@@ -32,9 +32,12 @@ services:
     environment:
       # Credenciales SOLO de desarrollo local.
       POSTGRES_USER: rulet
-      POSTGRES_PASSWORD: rulet_local_only
+      POSTGRES_PASSWORD: rulet
       POSTGRES_DB: rulet
-    volumes: ['db-data:/var/lib/postgresql/data']
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      # Crea también la BD de los e2e (rulet_test), igual que el Dev Container.
+      - ./.devcontainer/init-test-db.sql:/docker-entrypoint-initdb.d/10-init-test-db.sql:ro
     # Publicado solo en el loopback: no accesible desde otras máquinas de la red.
     ports: ['127.0.0.1:5432:5432']
     healthcheck:
@@ -62,7 +65,9 @@ services:
       PORT: 3000
       <<: *database-env
       # Del `.env` local (≥ 32 caracteres, aleatorio). Sin él, compose se niega a arrancar.
-      JWT_ACCESS_SECRET: '${JWT_ACCESS_SECRET:?Define JWT_ACCESS_SECRET en .env: openssl rand -base64 48}'
+      # Sin `:?` a propósito: así `docker compose up db` funciona sin .env. Si falta, la API no arranca y su
+      # validación de entorno explica el motivo (mínimo 32 caracteres, nunca un valor de ejemplo).
+      JWT_ACCESS_SECRET: '${JWT_ACCESS_SECRET:-}'
       CORS_ORIGINS: http://localhost:3001
       # Escape explícito: en producción la API solo admite orígenes localhost con esta variable.
       ALLOW_LOCALHOST_CORS: 'true'

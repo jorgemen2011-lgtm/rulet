@@ -11,7 +11,8 @@
 
 ## Checklist
 
-- [ ] `pnpm check` pasa en local
+- [ ] `pnpm check` pasa en local (y `pnpm test:e2e` si cambia la API)
+- [ ] Sigue el orden de trabajo y la Definition of Done de `docs/development-guide.md`
 - [ ] Si cambia un contrato de `@rulet/shared`, API y clientes están actualizados en este PR
 - [ ] Si añade una funcionalidad, está registrada en `FEATURES` con sus plataformas
 - [ ] Si añade variables de entorno, están en `.env.example` y en `docs/environments.md`
@@ -19,6 +20,8 @@
 - [ ] Si cambia el esquema de la BD, incluye la migración generada (`pnpm --filter @rulet/api db:generate`)
 
 ## Seguridad
+
+<!-- Checklist completa: docs/security.md, sección 8a. -->
 
 - [ ] No incluye secretos, tokens ni datos personales (tampoco en tests, logs o capturas)
 - [ ] Toda entrada externa se valida con un esquema Zod antes de usarse
