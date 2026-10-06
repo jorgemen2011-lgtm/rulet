@@ -1,0 +1,23 @@
+name: Funcionalidad
+description: Propón algo nuevo o una mejora.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Qué problema resuelve
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Propuesta
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Plataformas
+      description: Se registrará en `FEATURES` con estas plataformas (ver docs/adding-a-feature.md).
+      multiple: true
+      options: [API, Web, Móvil]

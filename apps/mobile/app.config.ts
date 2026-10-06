@@ -12,8 +12,27 @@ const VARIANTS = {
 } as const;
 
 type Variant = keyof typeof VARIANTS;
-const variant = (process.env.APP_VARIANT ?? 'development') as Variant;
-const { name, id } = VARIANTS[variant] ?? VARIANTS.development;
+
+function resolveVariant(raw: string | undefined): Variant {
+  const value = raw ?? 'development';
+  // Un valor mal escrito no debe caer en silencio a otra variante (p. ej. una build de producción con reglas de dev).
+  if (!Object.hasOwn(VARIANTS, value)) {
+    throw new Error(
+      `APP_VARIANT inválida: "${value}". Valores admitidos: ${Object.keys(VARIANTS).join(', ')}.`,
+    );
+  }
+  return value as Variant;
+}
+
+const variant = resolveVariant(process.env.APP_VARIANT);
+const { name, id } = VARIANTS[variant];
+
+// Comprobación temprana en build: fuera de desarrollo la API solo se alcanza por https. La app lo vuelve a
+// validar al arrancar (src/lib/env.ts), que además exige que la variable exista.
+const apiUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
+if (variant !== 'development' && apiUrl && !apiUrl.startsWith('https://')) {
+  throw new Error(`EXPO_PUBLIC_API_URL debe ser https en la variante "${variant}".`);
+}
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
@@ -25,8 +44,14 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   userInterfaceStyle: 'automatic',
   runtimeVersion: { policy: 'appVersion' },
   ios: { bundleIdentifier: id, supportsTablet: true },
-  android: { package: id },
-  plugins: ['expo-router'],
+  // Sin copias de seguridad de Android: los datos de la app (y cualquier rastro de sesión) no salen del dispositivo.
+  android: { package: id, allowBackup: false },
+  plugins: [
+    'expo-router',
+    // No se usa biometría: `faceIDPermission: false` evita declarar un permiso de Face ID innecesario.
+    // Se mantienen las reglas de backup del plugin como defensa en profundidad si se reactivase allowBackup.
+    ['expo-secure-store', { faceIDPermission: false, configureAndroidBackup: true }],
+  ],
   experiments: { typedRoutes: true },
   extra: { variant },
 });

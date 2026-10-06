@@ -3,3 +3,4 @@ pnpm-lock.yaml
 **/.next
 **/.expo
 **/.turbo
+apps/api/drizzle/meta

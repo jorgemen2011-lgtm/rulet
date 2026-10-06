@@ -18,8 +18,11 @@ RUN pnpm turbo run build --filter=@rulet/web
 FROM node:24-alpine AS runtime
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3001 HOSTNAME=0.0.0.0
 WORKDIR /app
-COPY --from=build --chown=node:node /repo/apps/web/.next/standalone ./
-COPY --from=build --chown=node:node /repo/apps/web/.next/static ./apps/web/.next/static
+# Código propiedad de root y sin permisos de escritura para `node`: el proceso no puede modificar su propio
+# código. Solo `.next/cache` (optimización de imágenes, ISR) es escribible.
+COPY --from=build /repo/apps/web/.next/standalone ./
+COPY --from=build /repo/apps/web/.next/static ./apps/web/.next/static
+RUN mkdir -p apps/web/.next/cache && chown -R node:node apps/web/.next/cache
 USER node
 EXPOSE 3001
 CMD ["node", "apps/web/server.js"]

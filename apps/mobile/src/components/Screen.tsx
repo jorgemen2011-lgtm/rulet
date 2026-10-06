@@ -12,6 +12,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: spacing.md,
     padding: spacing.md,
     backgroundColor: colors.background,
   },

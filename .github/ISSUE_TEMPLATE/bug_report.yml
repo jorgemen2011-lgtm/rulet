@@ -1,0 +1,36 @@
+name: Error
+description: Algo no funciona como debería.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ⚠️ Si es un problema de seguridad, **no** lo publiques aquí: sigue [SECURITY.md](https://github.com/jorgemen2011-lgtm/rulet/blob/main/SECURITY.md).
+        No pegues tokens, cookies, contraseñas ni datos personales.
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Plataforma
+      multiple: true
+      options: [API, Web, Móvil (iOS), Móvil (Android), Paquetes compartidos]
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: Qué pasa y qué esperabas
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Pasos para reproducirlo
+      placeholder: |
+        1. …
+        2. …
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Versión o commit

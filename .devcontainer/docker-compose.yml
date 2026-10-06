@@ -1,0 +1,41 @@
+# Servicios del Dev Container (lo usa .devcontainer/devcontainer.json; no se lanza a mano).
+# ⚠️ Credenciales y secreto SOLO de desarrollo: son públicos (están en git).
+services:
+  app:
+    image: mcr.microsoft.com/devcontainers/typescript-node:4-24-bookworm
+    # El contenedor queda vivo para que el editor se conecte; los procesos se lanzan desde la terminal.
+    command: sleep infinity
+    volumes: ['../..:/workspaces:cached']
+    # Comparte la red de `db`: los puertos de la API, la web y PostgreSQL se reenvían desde el mismo sitio.
+    network_mode: service:db
+    environment:
+      # Variables de la API (tienen prioridad sobre apps/api/.env). `localhost` es el servicio `db`: comparten red.
+      DATABASE_URL: postgres://rulet:rulet@localhost:5432/rulet
+      DATABASE_SSL: 'false'
+      JWT_ACCESS_SECRET: devcontainer-only-insecure-jwt-secret-0123456789abcdef
+      COOKIE_SECURE: 'false'
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
+      TURBO_TELEMETRY_DISABLED: '1'
+      NEXT_TELEMETRY_DISABLED: '1'
+    depends_on:
+      db: { condition: service_healthy }
+
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: rulet
+      POSTGRES_PASSWORD: rulet
+      POSTGRES_DB: rulet
+    volumes:
+      - devcontainer-db-data:/var/lib/postgresql/data
+      # Crea también la BD de los tests e2e (solo la primera vez, con el volumen vacío).
+      - ./init-test-db.sql:/docker-entrypoint-initdb.d/10-init-test-db.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U rulet -d rulet']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  devcontainer-db-data:

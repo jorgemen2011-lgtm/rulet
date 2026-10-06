@@ -1,0 +1,6 @@
+# Las vulnerabilidades nunca se informan en issues públicos: se redirigen a un advisory privado.
+blank_issues_enabled: false
+contact_links:
+  - name: Informar de una vulnerabilidad de seguridad
+    url: https://github.com/jorgemen2011-lgtm/rulet/security/advisories/new
+    about: En privado, mediante GitHub Security Advisories (ver SECURITY.md). No abras un issue público.
