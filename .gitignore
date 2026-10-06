@@ -29,3 +29,4 @@ android/
 .vscode/*
 !.vscode/extensions.json
 *.log
+*.tsbuildinfo
