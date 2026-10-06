@@ -18,7 +18,12 @@
     "check": "turbo run lint typecheck test && pnpm format:check && pnpm boundaries"
   },
   "devDependencies": {
+    "@commitlint/cli": "^21.2.3",
+    "@commitlint/config-conventional": "^21.2.3",
+    "@turbo/gen": "^2.11.7",
     "eslint": "^10.12.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.6.0",
     "prettier": "^3.9.9",
     "turbo": "^2.5.0",
     "typescript": "~6.0.0"

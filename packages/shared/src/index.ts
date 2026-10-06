@@ -6,7 +6,8 @@
  *              que comparten la API (validación) y los clientes (tipado).
  * - features:  catálogo de funcionalidades por plataforma.
  */
-export * from './platform';
-export * from './features';
+export * from './auth-transport';
 export * from './contracts';
 export * from './domain';
+export * from './features';
+export * from './platform';
