@@ -1,0 +1,17 @@
+# Levanta API y web como en producción:  docker compose up --build
+services:
+  api:
+    build: { context: ., dockerfile: apps/api/Dockerfile }
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      CORS_ORIGINS: http://localhost:3001
+    ports: ['3000:3000']
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args: { NEXT_PUBLIC_API_URL: http://localhost:3000 }
+    ports: ['3001:3001']
+    depends_on: [api]

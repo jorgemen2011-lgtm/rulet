@@ -10,10 +10,20 @@
     "build": "turbo run build",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
-    "test": "turbo run test"
+    "test": "turbo run test",
+    "test:e2e": "turbo run test:e2e",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "boundaries": "turbo boundaries",
+    "check": "turbo run lint typecheck test && pnpm format:check && pnpm boundaries"
   },
   "devDependencies": {
+    "eslint": "^9.39.5",
+    "prettier": "^3.9.9",
     "turbo": "^2.5.0",
     "typescript": "^5.8.0"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

@@ -28,5 +28,7 @@ android/
 .idea/
 .vscode/*
 !.vscode/extensions.json
+!.vscode/settings.json
 *.log
 *.tsbuildinfo
+next-env.d.ts

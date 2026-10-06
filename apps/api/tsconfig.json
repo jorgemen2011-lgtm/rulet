@@ -10,5 +10,5 @@
     "baseUrl": "./",
     "sourceMap": true
   },
-  "include": ["src"]
+  "include": ["src", "test"]
 }

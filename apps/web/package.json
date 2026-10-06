@@ -6,20 +6,25 @@
     "dev": "next dev -p 3001",
     "build": "next build",
     "start": "next start -p 3001",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . --max-warnings=0"
   },
   "dependencies": {
     "@rulet/api-client": "workspace:*",
+    "@rulet/design-tokens": "workspace:*",
     "@rulet/shared": "workspace:*",
     "next": "^15.5.0",
     "react": "19.1.0",
-    "react-dom": "19.1.0"
+    "react-dom": "19.1.0",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@rulet/eslint-config": "workspace:*",
     "@rulet/tsconfig": "workspace:*",
     "@types/node": "^22.0.0",
     "@types/react": "~19.1.0",
     "@types/react-dom": "~19.1.0",
+    "eslint": "^9.39.5",
     "typescript": "^5.8.0"
   }
 }
