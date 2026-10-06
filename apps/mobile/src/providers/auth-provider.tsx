@@ -3,6 +3,8 @@ import type { LoginRequest, RegisterRequest, User } from '@rulet/shared';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { api, subscribeToSessionExpired } from '../lib/api';
+import { clearSessionOnFirstLaunch } from '../lib/first-launch';
+import { installMarker } from '../lib/install-marker';
 import { secureTokenStore } from '../lib/secure-token-store';
 
 /**
@@ -92,6 +94,9 @@ export function useSession(): SessionContextValue {
 /** Lee la sesión guardada y la valida contra la API. Nunca lanza: traduce cada fallo a un estado. */
 async function restoreSession(): Promise<SessionState> {
   try {
+    // Una reinstalación no hereda la sesión anterior (en iOS el Keychain sobrevive a la desinstalación).
+    // Si la limpieza falla se cae al catch: sin sesión, nunca con la heredada.
+    await clearSessionOnFirstLaunch({ marker: installMarker, tokenStore: secureTokenStore });
     // Sin tokens no hay nada que validar: se evita una llamada a la API que fallaría sin conexión.
     if (!(await secureTokenStore.get())) return ANONYMOUS;
     const user = await api.users.me();
@@ -99,8 +104,9 @@ async function restoreSession(): Promise<SessionState> {
   } catch (error) {
     // Un fallo transitorio no significa que la sesión sea inválida: se conservan los tokens y se ofrece reintentar.
     if (isTransientError(error)) return { status: 'loading', connectionError: true };
-    // 401 tras intentar renovar (el cliente ya ha limpiado el almacén), respuesta fuera de contrato o
-    // almacén ilegible: se trata como sin sesión y el usuario vuelve a autenticarse.
+    // 401 tras intentar renovar (el cliente ya ha limpiado el almacén), respuesta fuera de contrato,
+    // almacén ilegible o marca de instalación inaccesible: se trata como sin sesión y el usuario vuelve a
+    // autenticarse.
     return ANONYMOUS;
   }
 }

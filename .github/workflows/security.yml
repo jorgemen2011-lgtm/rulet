@@ -11,8 +11,10 @@ on:
     - cron: '23 4 * * 1'
   workflow_dispatch:
 
+# El evento forma parte del grupo: un push a `main` cancela el push anterior, pero no la ejecución semanal
+# (ni la manual), que comparte `github.ref` con él y es la única que escanea con gitleaks todo el historial.
 concurrency:
-  group: security-${{ github.ref }}
+  group: security-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 # Ningún permiso por defecto: cada job pide los suyos.

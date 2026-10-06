@@ -53,7 +53,8 @@ const items = await api.request(ItemListSchema, '/items?page=2');
 
 Ante un `401` en una ruta autenticada:
 
-1. Si otra petición ya renovó la sesión mientras esta estaba en vuelo, se reintenta directamente.
+1. Si otra petición ya renovó la sesión del mismo usuario mientras esta estaba en vuelo, se reintenta
+   directamente.
 2. Si no, se lanza **un único** refresh compartido por todas las peticiones que lo necesiten (single-flight). Es
    imprescindible: la API rota el refresh token y, si recibe dos veces el mismo, revoca toda la familia de sesiones.
 3. Se reintenta la petición **una sola vez**.
@@ -61,6 +62,12 @@ Ante un `401` en una ruta autenticada:
    vez y la petición original falla con su `ApiError` 401 (con el error del refresh en `cause`).
 5. Si el refresh falla por un problema **transitorio** (red, timeout, 5xx, 429) la sesión **no** se cierra: se
    propaga el error para que la app reintente más tarde.
+
+**Cambios de identidad.** Un login, register, logout o una sesión expirada pueden cambiar de usuario; un refresh
+no. Si la identidad cambia entre el envío de una petición y su `401` (o mientras espera la renovación), la petición
+**no** se reintenta: falla con su `401`, porque reenviarla la ejecutaría como otro usuario. Del mismo modo, un
+refresh que la API rechaza después de un logout o de un login posterior no limpia el `TokenStore` ni llama a
+`onSessionExpired()`: esa sesión ya no es la vigente.
 
 En móvil, si no hay tokens guardados, un 401 es definitivo (no hay nada que renovar ni sesión que expirar). En web
 el cliente no puede saber si hay sesión, así que un visitante anónimo que llame a `users.me()` provoca un refresh

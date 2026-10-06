@@ -1,11 +1,50 @@
 import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus, Logger } from '@nestjs/common';
 import type { ApiErrorResponse } from '@rulet/shared';
+import { DrizzleQueryError } from 'drizzle-orm';
 import type { Request, Response } from 'express';
 import { REQUEST_ID_HEADER } from '../middleware/request-id.middleware.js';
 
+interface LoggedError {
+  name: string;
+  message: string;
+  query?: string;
+  code?: string;
+  cause?: string;
+}
+
+/** Traza sin su cabecera (`Nombre: mensaje`, que puede ocupar varias líneas): solo los marcos `at …`. */
+function stackFrames(error: Error): string | undefined {
+  const frames = error.stack?.split('\n').filter((line) => /^\s+at /.test(line));
+  return frames && frames.length > 0 ? frames.join('\n') : undefined;
+}
+
+/**
+ * Lo que se registra de un error no controlado. Nunca el objeto tal cual: el error de consulta de Drizzle
+ * lleva los parámetros enlazados (emails, hashes de contraseña o de tokens) en `message`, `stack` y `params`.
+ * De él solo se registran la consulta (con marcadores `$1`), y el código y mensaje del error de `pg`.
+ */
+export function describeError(exception: unknown): { error: LoggedError; stack?: string } {
+  if (!(exception instanceof Error)) return { error: { name: 'NonError', message: String(exception) } };
+  if (exception instanceof DrizzleQueryError) {
+    const cause = exception.cause instanceof Error ? exception.cause : undefined;
+    const code = (cause as { code?: unknown } | undefined)?.code;
+    return {
+      error: {
+        name: 'DrizzleQueryError',
+        message: 'Failed query',
+        query: exception.query,
+        ...(typeof code === 'string' && { code }),
+        ...(cause && { cause: cause.message }),
+      },
+      stack: stackFrames(exception),
+    };
+  }
+  return { error: { name: exception.name, message: exception.message }, stack: exception.stack };
+}
+
 /**
  * Convierte cualquier excepción en la forma `ApiErrorResponse` de @rulet/shared.
- * Los errores no controlados se registran completos pero nunca se filtran al cliente.
+ * Los errores no controlados se registran (depurados de datos sensibles) pero nunca se filtran al cliente.
  */
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
@@ -24,7 +63,8 @@ export class AllExceptionsFilter implements ExceptionFilter {
       typeof payload === 'object' && payload !== null ? (payload as Record<string, unknown>) : {};
 
     if (!isHttp) {
-      this.logger.error({ requestId, path: req.url, err: exception }, (exception as Error)?.stack);
+      const { error, stack } = describeError(exception);
+      this.logger.error({ requestId, path: req.url, err: error }, stack);
     }
 
     const body: ApiErrorResponse = {

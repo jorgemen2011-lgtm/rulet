@@ -356,6 +356,146 @@ describe('renovación de sesión ante 401', () => {
     expect(onSessionExpired).not.toHaveBeenCalled();
   });
 
+  it('un refresh rechazado tras un login posterior no borra la sesión nueva ni avisa', async () => {
+    const store = spyStore(tokens(1));
+    const onSessionExpired = vi.fn();
+    const refreshGate = deferred();
+    const { fetch } = mockFetch(async (req) => {
+      if (req.url.endsWith('/auth/refresh')) {
+        await refreshGate.promise;
+        return json(401, errorBody(401, 'Sesión revocada'));
+      }
+      return json(200, { user, tokens: tokens(2) });
+    });
+    const api = createApiClient({
+      baseUrl: BASE,
+      platform: 'mobile',
+      tokenStore: store,
+      onSessionExpired,
+      fetch,
+    });
+
+    const refreshing = api.auth.refresh().catch((e: unknown) => e);
+    await api.auth.login({ email: user.email, password: 'x' });
+    refreshGate.resolve();
+
+    await expect(refreshing).resolves.toMatchObject({ status: 401, code: 'http' });
+    await expect(store.get()).resolves.toEqual(tokens(2));
+    expect(store.clear).not.toHaveBeenCalled();
+    expect(onSessionExpired).not.toHaveBeenCalled();
+  });
+
+  it('no reintenta con la sesión de otra cuenta si hubo login mientras la petición estaba en vuelo', async () => {
+    // Usuario A: su sesión caduca, el refresh se rechaza y B inicia sesión antes de que llegue el 401 de A.
+    const store = spyStore(tokens(1));
+    const transferGate = deferred();
+    const { fetch, callsTo } = mockFetch(async (req) => {
+      const path = new URL(req.url).pathname;
+      if (path === '/v1/transfer') {
+        if (req.headers.authorization === 'Bearer access-1') {
+          await transferGate.promise;
+          return json(401, errorBody(401, 'Token caducado'));
+        }
+        return json(200, { ok: true });
+      }
+      if (path === '/v1/users/me') return json(401, errorBody(401, 'Token caducado'));
+      if (path === '/v1/auth/refresh') return json(401, errorBody(401, 'Sesión revocada'));
+      return json(200, { user, tokens: tokens(2) });
+    });
+    const api = createApiClient({ baseUrl: BASE, platform: 'mobile', tokenStore: store, fetch });
+
+    const transfer = api
+      .request(z.object({ ok: z.boolean() }), '/transfer', { method: 'POST', body: { amount: 100 } })
+      .catch((e: unknown) => e);
+    await vi.waitFor(() => expect(callsTo('/v1/transfer')).toHaveLength(1));
+    await expect(api.users.me()).rejects.toMatchObject({ status: 401 });
+    await api.auth.login({ email: user.email, password: 'x' });
+    transferGate.resolve();
+
+    await expect(transfer).resolves.toMatchObject({ status: 401, code: 'http', message: 'Token caducado' });
+    expect(callsTo('/v1/transfer').map((c) => c.headers.authorization)).toEqual(['Bearer access-1']);
+    await expect(store.get()).resolves.toEqual(tokens(2));
+  });
+
+  it('no reintenta con la sesión de otra cuenta si hubo login mientras esperaba la renovación', async () => {
+    const store = spyStore(tokens(1));
+    const refreshGate = deferred();
+    const { fetch, callsTo } = mockFetch(async (req) => {
+      const path = new URL(req.url).pathname;
+      if (path === '/v1/transfer') {
+        return req.headers.authorization === 'Bearer access-1'
+          ? json(401, errorBody(401, 'Token caducado'))
+          : json(200, { ok: true });
+      }
+      if (path === '/v1/auth/refresh') {
+        await refreshGate.promise;
+        return json(200, { user, tokens: tokens(3) });
+      }
+      return json(200, { user, tokens: tokens(2) });
+    });
+    const api = createApiClient({ baseUrl: BASE, platform: 'mobile', tokenStore: store, fetch });
+
+    const transfer = api
+      .request(z.object({ ok: z.boolean() }), '/transfer', { method: 'POST', body: { amount: 100 } })
+      .catch((e: unknown) => e);
+    await vi.waitFor(() => expect(callsTo('/v1/auth/refresh')).toHaveLength(1));
+    await api.auth.login({ email: user.email, password: 'x' });
+    refreshGate.resolve();
+
+    await expect(transfer).resolves.toMatchObject({ status: 401, code: 'http' });
+    expect(callsTo('/v1/transfer').map((c) => c.headers.authorization)).toEqual(['Bearer access-1']);
+    // Los tokens renovados de A no sustituyen a la sesión de B.
+    await expect(store.get()).resolves.toEqual(tokens(2));
+  });
+
+  it('tras un logout no reintenta una petición en vuelo que recibe 401', async () => {
+    const store = spyStore(tokens(1));
+    const itemsGate = deferred();
+    const { fetch, callsTo } = mockFetch(async (req) => {
+      const path = new URL(req.url).pathname;
+      if (path === '/v1/items') {
+        await itemsGate.promise;
+        return json(401, errorBody(401, 'x'));
+      }
+      return new Response(null, { status: 204 });
+    });
+    const api = createApiClient({ baseUrl: BASE, platform: 'mobile', tokenStore: store, fetch });
+
+    const items = api.request(z.unknown(), '/items').catch((e: unknown) => e);
+    await vi.waitFor(() => expect(callsTo('/v1/items')).toHaveLength(1));
+    await api.auth.logout();
+    itemsGate.resolve();
+
+    await expect(items).resolves.toMatchObject({ status: 401, code: 'http' });
+    expect(callsTo('/v1/items')).toHaveLength(1);
+    expect(callsTo('/v1/auth/refresh')).toHaveLength(0);
+  });
+
+  it('si otra petición ya renovó la sesión del mismo usuario, reintenta sin volver a renovar', async () => {
+    const store = spyStore(tokens(1));
+    const slowGate = deferred();
+    const { fetch, callsTo } = mockFetch(async (req) => {
+      const path = new URL(req.url).pathname;
+      if (path === '/v1/auth/refresh') return json(200, { user, tokens: tokens(2) });
+      if (req.headers.authorization === 'Bearer access-2') return json(200, { ok: true });
+      if (path === '/v1/slow') await slowGate.promise;
+      return json(401, errorBody(401, 'x'));
+    });
+    const api = createApiClient({ baseUrl: BASE, platform: 'mobile', tokenStore: store, fetch });
+
+    const slow = api.request(z.object({ ok: z.boolean() }), '/slow');
+    await vi.waitFor(() => expect(callsTo('/v1/slow')).toHaveLength(1));
+    await api.request(z.object({ ok: z.boolean() }), '/fast');
+    slowGate.resolve();
+
+    await expect(slow).resolves.toEqual({ ok: true });
+    expect(callsTo('/v1/auth/refresh')).toHaveLength(1);
+    expect(callsTo('/v1/slow').map((c) => c.headers.authorization)).toEqual([
+      'Bearer access-1',
+      'Bearer access-2',
+    ]);
+  });
+
   it('en mobile sin sesión guardada un 401 es definitivo (sin refresh ni aviso)', async () => {
     const onSessionExpired = vi.fn();
     const { fetch, calls } = mockFetch(() => json(401, errorBody(401, 'x')));

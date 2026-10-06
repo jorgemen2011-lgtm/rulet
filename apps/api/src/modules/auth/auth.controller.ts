@@ -13,12 +13,19 @@ import {
   RegisterRequestSchema,
 } from '@rulet/shared';
 import type { Request, Response } from 'express';
-import { clearAuthCookies, readRefreshCookie, setAuthCookies } from '../../common/auth/auth-cookies.js';
+import {
+  clearAuthCookies,
+  clearShadowedRefreshCookies,
+  readRefreshCookie,
+  readRefreshCookieCandidates,
+  setAuthCookies,
+} from '../../common/auth/auth-cookies.js';
 import { ClientPlatform } from '../../common/decorators/client-platform.decorator.js';
 import { Public } from '../../common/decorators/public.decorator.js';
 import { RequiredPlatformPipe } from '../../common/pipes/required-platform.pipe.js';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe.js';
 import { AppConfigService } from '../../config/app-config.service.js';
+import { ThrottleByAccount } from './account-throttler.js';
 import { type AuthResult, AuthService } from './auth.service.js';
 
 const ONE_MINUTE_MS = 60_000;
@@ -49,6 +56,7 @@ export class AuthController {
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @Throttle({ default: { limit: 5, ttl: ONE_MINUTE_MS } })
+  @ThrottleByAccount()
   async login(
     @ClientPlatform(RequiredPlatformPipe) platform: Platform,
     @Body(new ZodValidationPipe(LoginRequestSchema)) body: LoginRequest,
@@ -66,6 +74,8 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<AuthResponse> {
+    // Cookie repetida (posible cookie tossing): `readRefreshCookie` la trata como ausente → 401, y se borran.
+    if (platform === 'web') clearShadowedRefreshCookies(req, res, this.config.get('COOKIE_SECURE'));
     return this.respond(platform, res, await this.auth.refresh(this.refreshTokenFrom(platform, body, req)));
   }
 
@@ -78,8 +88,15 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<void> {
-    await this.auth.logout(this.refreshTokenFrom(platform, body, req));
-    clearAuthCookies(res, this.config.get('COOKIE_SECURE'));
+    const secure = this.config.get('COOKIE_SECURE');
+    if (platform === 'mobile') {
+      await this.auth.logout(body.refreshToken);
+    } else {
+      // Si una cookie plantada sombrea la auténtica, se revocan todas: el logout no puede fallar en silencio.
+      for (const token of readRefreshCookieCandidates(req, secure)) await this.auth.logout(token);
+      clearShadowedRefreshCookies(req, res, secure);
+    }
+    clearAuthCookies(res, secure);
   }
 
   /** Cada plataforma tiene una única fuente del refresh token; nunca se mezclan. */

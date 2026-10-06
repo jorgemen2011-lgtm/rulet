@@ -32,8 +32,9 @@ export function setupApp(app: NestExpressApplication): AppConfigService {
       logLevels: config.get('NODE_ENV') === 'test' ? ['warn', 'error', 'fatal'] : undefined,
     }),
   );
-  // Un único proxy inverso (balanceador) delante: `req.ip` es la IP real para el rate limiting.
-  app.set('trust proxy', 1);
+  // Proxies de confianza según la topología del despliegue (TRUST_PROXY, ver env.ts): de ello depende que
+  // `req.ip`, la clave del rate limiting, sea la IP real del cliente y no una elegida en `X-Forwarded-For`.
+  app.set('trust proxy', config.get('TRUST_PROXY'));
   app.disable('x-powered-by');
 
   app.use(requestIdMiddleware);

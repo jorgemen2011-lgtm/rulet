@@ -1,9 +1,11 @@
 # Publicación de imágenes en GitHub Container Registry (ghcr.io/<owner>/rulet-api y rulet-web).
 #
 # Se dispara con cada push a `main`, pero solo DESPUÉS de que el workflow CI termine en verde para ese
-# commit (`workflow_run`): así nunca se publica como `latest` una imagen que no pasó tests ni Trivy.
-# Cada imagen sale con tags `sha-<commit>` (inmutable, el que se despliega) y `latest`, procedencia
-# SLSA (mode=max), SBOM y una atestación firmada con Sigstore verificable con:
+# commit (`workflow_run`). Esta imagen se construye de nuevo (en otro runner y con otra NEXT_PUBLIC_API_URL),
+# así que el escaneo de CI no la cubre: se sube primero solo con `sha-<commit>`, Trivy escanea ESE digest y
+# solo si pasa se atesta y se mueve `latest` a él. Así nunca se publica como `latest` una imagen que no pasó
+# tests ni Trivy. Si Trivy falla, queda `sha-<commit>` sin atestación y `latest` sigue en la anterior.
+# Cada imagen sale con procedencia SLSA (mode=max), SBOM y una atestación firmada con Sigstore verificable con:
 #   gh attestation verify oci://ghcr.io/<owner>/rulet-api:sha-<commit> --owner <owner>
 #
 # Requisito: variable de repositorio `NEXT_PUBLIC_API_URL` (Settings → Secrets and variables → Actions
@@ -78,9 +80,8 @@ jobs:
           # `git`: toma el SHA del checkout (el de CI) en lugar del contexto del evento `workflow_run`.
           context: git
           images: ${{ steps.image.outputs.name }}
-          tags: |
-            type=sha,format=long
-            type=raw,value=latest
+          # Solo el tag inmutable: `latest` se mueve al final, cuando la imagen ya pasó Trivy.
+          tags: type=sha,format=long
 
       - name: Build y push
         id: push
@@ -97,6 +98,21 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.app }}
           cache-to: type=gha,mode=max,scope=${{ matrix.app }}
 
+      # Se escanea la imagen publicada por su digest (no por tag): exactamente lo que se atesta y se despliega.
+      # Trivy reutiliza las credenciales de `docker login` para leer de ghcr.io.
+      - name: Escaneo de vulnerabilidades (Trivy)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ steps.image.outputs.name }}@${{ steps.push.outputs.digest }}
+          scanners: vuln
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+          # Mismo criterio que CI: solo bloquea lo que tiene parche disponible.
+          ignore-unfixed: true
+          exit-code: '1'
+          format: table
+
       - name: Atestación de procedencia
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
@@ -105,3 +121,17 @@ jobs:
           push-to-registry: true
           # El registro de almacenamiento exigiría además `artifact-metadata: write`.
           create-storage-record: false
+
+      # Copia exacta (`--prefer-index=false`) del índice ya escaneado y atestado: `latest` apunta al mismo
+      # digest que `sha-<commit>`. Se comprueba después por si el registro lo reescribiera.
+      - name: Mover latest a la imagen escaneada
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          docker buildx imagetools create --prefer-index=false --tag "$IMAGE:latest" "$IMAGE@$DIGEST"
+          actual="$(docker buildx imagetools inspect "$IMAGE:latest" --format '{{.Manifest.Digest}}')"
+          if [ "$actual" != "$DIGEST" ]; then
+            echo "::error::$IMAGE:latest apunta a $actual en lugar de $DIGEST."
+            exit 1
+          fi

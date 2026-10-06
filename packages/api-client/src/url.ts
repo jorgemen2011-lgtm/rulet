@@ -52,6 +52,8 @@ export function assertSafePath(path: string): void {
     path.startsWith('/') &&
     !path.startsWith('//') &&
     !/[\s#\\]/.test(path) &&
+    // `%2e` es un punto codificado: fetch normaliza `/%2e%2e/` como `/../` y saldría del prefijo /vN.
+    !/%2e/i.test(pathname) &&
     !pathname.split('/').some((segment) => segment === '.' || segment === '..');
   if (!valid) {
     throw new Error(`Ruta inválida: "${path}". Debe empezar por "/" y ser relativa a la API.`);

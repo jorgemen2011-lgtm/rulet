@@ -1,9 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
-import type { z } from 'zod';
+import type { FieldErrors, Validation } from '../validation';
 
-export type FieldErrors<F extends string> = Partial<Record<F, string>>;
-
-export type Validation<F extends string, T> = { ok: true; data: T } | { ok: false; errors: FieldErrors<F> };
+export type { FieldErrors, Validation } from '../validation';
 
 export interface AuthFormOptions<F extends string, T> {
   initialValues: Record<F, string>;
@@ -65,18 +63,4 @@ export function useAuthForm<F extends string, T>({
   };
 
   return { values, errors, formError, submitting, setValue, handleSubmit };
-}
-
-/** Primer mensaje de error por campo de primer nivel; `messageFor` decide el texto que ve el usuario. */
-export function collectFieldErrors<F extends string>(
-  error: z.ZodError,
-  fields: readonly F[],
-  messageFor: (field: F, issue: z.core.$ZodIssue) => string,
-): FieldErrors<F> {
-  const errors: FieldErrors<F> = {};
-  for (const issue of error.issues) {
-    const field = fields.find((candidate) => candidate === issue.path[0]);
-    if (field && errors[field] === undefined) errors[field] = messageFor(field, issue);
-  }
-  return errors;
 }

@@ -36,8 +36,10 @@ export function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     {
-      // Solo documentos HTML: los estáticos con hash no ejecutan nada y no necesitan CSP propia.
-      source: '/((?!_next/static|_next/image|favicon.ico).*)',
+      // Solo documentos HTML: los estáticos con hash no ejecutan nada y no necesitan CSP propia. Las exclusiones
+      // van ancladas (directorio `_next/static/`, rutas exactas `/_next/image` y `/favicon.ico`) para que una
+      // ruta que solo comparta el prefijo (`/favicon.icox`, `/_next/staticx`) siga recibiendo la CSP.
+      source: '/((?!_next/static/|_next/image$|favicon\\.ico$).*)',
       // Las precargas de <Link> no son documentos: se omiten para no generar nonces inútiles.
       missing: [
         { type: 'header', key: 'next-router-prefetch' },

@@ -24,6 +24,12 @@ const INVALID_SESSION = 'Sesión no válida o caducada';
 const REGISTRATION_FAILED = 'No se ha podido completar el registro';
 
 /**
+ * Duración máxima de una familia de sesiones desde el login, por mucho que se refresque: pasado este
+ * límite hay que volver a autenticarse (un refresh token robado no da acceso indefinido).
+ */
+export const MAX_SESSION_LIFETIME_SECONDS = 90 * 24 * 60 * 60;
+
+/**
  * Lógica de autenticación, independiente del transporte (cookies o cuerpo lo decide el controller).
  * Refresh tokens con rotación y detección de reutilización: cada uso revoca el token y emite otro de
  * la misma familia; si llega un token ya revocado, alguien lo ha copiado y se revoca toda la familia.
@@ -64,13 +70,18 @@ export class AuthService {
       await this.revokeFamilyOnReuse(session.familyId, session.userId);
       throw new UnauthorizedException(INVALID_SESSION);
     }
-    if (session.expiresAt.getTime() <= Date.now()) throw new UnauthorizedException(INVALID_SESSION);
+    const expiresAt = Math.min(session.expiresAt.getTime(), session.familyExpiresAt.getTime());
+    if (expiresAt <= Date.now()) throw new UnauthorizedException(INVALID_SESSION);
 
     // Se relee el usuario para que el nuevo access token lleve su rol actual.
     const user = await this.users.findById(session.userId);
     if (!user) throw new UnauthorizedException(INVALID_SESSION);
 
-    const { session: next, refreshToken: nextToken } = this.newSession(user.id, session.familyId);
+    const { session: next, refreshToken: nextToken } = this.newSession(
+      user.id,
+      session.familyId,
+      session.familyExpiresAt,
+    );
     const rotated = await this.sessions.rotate(session.id, next);
     if (!rotated) {
       // Otra petición rotó este mismo token a la vez: es una reutilización.
@@ -88,13 +99,20 @@ export class AuthService {
   }
 
   private async startSession(user: User): Promise<AuthResult> {
-    const { session, refreshToken } = this.newSession(user.id, randomUUID());
+    const familyExpiresAt = new Date(Date.now() + MAX_SESSION_LIFETIME_SECONDS * 1000);
+    const { session, refreshToken } = this.newSession(user.id, randomUUID(), familyExpiresAt);
     await this.sessions.create(session);
     return { user, tokens: await this.buildTokens(user, refreshToken, session.expiresAt) };
   }
 
-  private newSession(userId: string, familyId: string): { session: NewSession; refreshToken: string } {
+  /** Cada token vale 30 días, pero nunca más allá de la caducidad absoluta de su familia. */
+  private newSession(
+    userId: string,
+    familyId: string,
+    familyExpiresAt: Date,
+  ): { session: NewSession; refreshToken: string } {
     const refreshToken = generateRefreshToken();
+    const expiresAt = Math.min(Date.now() + REFRESH_TOKEN_TTL_SECONDS * 1000, familyExpiresAt.getTime());
     return {
       refreshToken,
       session: {
@@ -102,7 +120,8 @@ export class AuthService {
         userId,
         familyId,
         tokenHash: hashRefreshToken(refreshToken),
-        expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_SECONDS * 1000),
+        expiresAt: new Date(expiresAt),
+        familyExpiresAt,
       },
     };
   }

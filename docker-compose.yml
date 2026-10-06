@@ -1,11 +1,14 @@
 # Entorno local "como en producción": PostgreSQL + migraciones + API + web con las imágenes de producción.
 #
+#   cp .env.example .env             # una vez: define JWT_ACCESS_SECRET (ver .env.example)
 #   docker compose up --build        # API en http://localhost:3000, web en http://localhost:3001
 #   docker compose down              # para; añade -v para borrar también los datos de la BD
 #
-# ⚠️ SOLO PARA DESARROLLO LOCAL. Las credenciales y el secreto JWT de este archivo son públicos (están en
-# git) y no deben usarse en ningún entorno desplegado. En producción se inyectan desde el gestor de
-# secretos de la plataforma y la conexión a la BD va con TLS (DATABASE_SSL=true).
+# ⚠️ SOLO PARA DESARROLLO LOCAL. Las credenciales de la BD de este archivo son públicas (están en git) y no
+# deben usarse en ningún entorno desplegado. El secreto JWT no está aquí: compose lo toma del `.env` de la
+# raíz (no versionado), porque la API arranca con NODE_ENV=production y rechaza secretos de ejemplo.
+# En producción todo se inyecta desde el gestor de secretos de la plataforma y la conexión a la BD va con
+# TLS (DATABASE_SSL=true).
 
 x-api-image: &api-image
   build: { context: ., dockerfile: apps/api/Dockerfile }
@@ -58,9 +61,13 @@ services:
       NODE_ENV: production
       PORT: 3000
       <<: *database-env
-      # Secreto SOLO de desarrollo local (≥ 32 caracteres). En producción: aleatorio y desde el gestor de secretos.
-      JWT_ACCESS_SECRET: local-dev-only-insecure-jwt-secret-change-me-0123456789
+      # Del `.env` local (≥ 32 caracteres, aleatorio). Sin él, compose se niega a arrancar.
+      JWT_ACCESS_SECRET: '${JWT_ACCESS_SECRET:?Define JWT_ACCESS_SECRET en .env: openssl rand -base64 48}'
       CORS_ORIGINS: http://localhost:3001
+      # Escape explícito: en producción la API solo admite orígenes localhost con esta variable.
+      ALLOW_LOCALHOST_CORS: 'true'
+      # La API recibe el tráfico directamente (puerto publicado), sin proxy delante: no se confía en X-Forwarded-For.
+      TRUST_PROXY: 'false'
       # HTTP local: las cookies `Secure`/`__Host-` no se enviarían sin HTTPS.
       COOKIE_SECURE: 'false'
     read_only: true

@@ -16,6 +16,9 @@ export const sessions = pgTable(
     familyId: uuid('family_id').notNull(),
     tokenHash: text('token_hash').notNull().unique(),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    // Caducidad absoluta de la familia: se fija al iniciar sesión y se copia en cada rotación, de modo que
+    // refrescar no alarga la sesión más allá de este límite (luego hay que volver a autenticarse).
+    familyExpiresAt: timestamp('family_expires_at', { withTimezone: true }).notNull(),
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
     replacedById: uuid('replaced_by_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

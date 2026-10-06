@@ -54,6 +54,14 @@ export async function sendHttp(fetchImpl: FetchFn, req: HttpRequest): Promise<Ht
       redirect: 'error',
       signal: controller.signal,
     });
+    // React Native ignora `redirect: 'error'` y sigue la redirección. No podemos evitar que la petición
+    // llegue al destino, pero sí que su respuesta se trate como si viniera de la API.
+    if (res.redirected) {
+      throw new ApiError(0, null, {
+        code: 'invalid_response',
+        message: 'La API respondió con una redirección',
+      });
+    }
     const text = await res.text();
     const decoded = decodeJson(text);
     return { status: res.status, ok: res.ok, ...decoded };

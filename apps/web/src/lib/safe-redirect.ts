@@ -13,7 +13,9 @@ const INTERNAL_BASE = 'https://internal.invalid';
  * Devuelve `value` normalizado si es una ruta interna de la web; si no, `fallback`.
  *
  * Evita open redirects (`?next=https://evil.com`, `//evil.com`, `/\evil.com`, `javascript:`…): solo se aceptan
- * rutas relativas a la raíz que, resueltas por el mismo parser de URL que usa el navegador, sigan en este origen.
+ * rutas relativas a la raíz que, resueltas por el mismo parser de URL que usa el navegador, sigan en este origen
+ * y cuya ruta normalizada siga siendo relativa a la raíz. El resultado es estable: volver a pasarlo por aquí
+ * devuelve lo mismo.
  */
 export function safeRedirectPath(value: unknown, fallback: string = DEFAULT_AFTER_LOGIN_PATH): string {
   if (typeof value !== 'string' || value.length === 0 || value.length > MAX_REDIRECT_LENGTH) return fallback;
@@ -31,6 +33,11 @@ export function safeRedirectPath(value: unknown, fallback: string = DEFAULT_AFTE
     return fallback;
   }
   if (url.origin !== INTERNAL_BASE) return fallback;
+  // El parser elimina los segmentos '.', '..', '%2e' y '%2e%2e', así que una entrada que empieza por '/x'
+  // (p. ej. '/.//evil.com' o '/a/..//evil.com') puede acabar con un pathname '//evil.com'. El navegador lo
+  // resolvería como URL relativa al protocolo (https://evil.com), por eso se valida también la ruta ya
+  // normalizada y no solo la entrada. '\' no hace falta: en URLs https el parser ya lo convierte en '/'.
+  if (url.pathname.startsWith('//')) return fallback;
 
   const isAuthPath = AUTH_PATHS.some((path) => url.pathname === path || url.pathname.startsWith(`${path}/`));
   if (isAuthPath) return fallback;

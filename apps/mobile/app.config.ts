@@ -13,7 +13,17 @@ const VARIANTS = {
 
 type Variant = keyof typeof VARIANTS;
 
-function resolveVariant(raw: string | undefined): Variant {
+/**
+ * Sin APP_VARIANT se asume desarrollo solo en local (`expo start`, `expo run:*`). En EAS (`EAS_BUILD`) la
+ * variante es obligatoria: un perfil nuevo que olvide fijarla no debe producir en silencio una build con el
+ * bundle id y las reglas de desarrollo (http permitido, sin https obligatorio).
+ */
+export function resolveVariant(raw: string | undefined, easBuild: boolean): Variant {
+  if (raw === undefined && easBuild) {
+    throw new Error(
+      `APP_VARIANT es obligatoria en las builds de EAS (fíjala en el perfil de eas.json). Valores admitidos: ${Object.keys(VARIANTS).join(', ')}.`,
+    );
+  }
   const value = raw ?? 'development';
   // Un valor mal escrito no debe caer en silencio a otra variante (p. ej. una build de producción con reglas de dev).
   if (!Object.hasOwn(VARIANTS, value)) {
@@ -24,7 +34,8 @@ function resolveVariant(raw: string | undefined): Variant {
   return value as Variant;
 }
 
-const variant = resolveVariant(process.env.APP_VARIANT);
+// EAS define `EAS_BUILD` en sus workers de build.
+const variant = resolveVariant(process.env.APP_VARIANT, Boolean(process.env.EAS_BUILD));
 const { name, id } = VARIANTS[variant];
 
 // Comprobación temprana en build: fuera de desarrollo la API solo se alcanza por https. La app lo vuelve a

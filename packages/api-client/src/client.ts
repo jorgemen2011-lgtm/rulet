@@ -128,10 +128,17 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
   const authResponseSchema = tokenStore ? MobileAuthResponseSchema : AuthResponseSchema;
 
   /**
-   * Se incrementa cada vez que cambia la sesión (login, register, refresh, logout). Permite saber si un 401
-   * corresponde a credenciales ya sustituidas, en cuyo caso basta con reintentar sin volver a renovar.
+   * Se incrementa cada vez que cambian las credenciales (login, register, refresh, logout). Permite saber si un
+   * 401 corresponde a credenciales ya sustituidas, en cuyo caso basta con reintentar sin volver a renovar, y si
+   * una renovación sigue siendo la sesión vigente cuando responde.
    */
   let sessionGeneration = 0;
+  /**
+   * Se incrementa cuando puede cambiar la identidad (login, register, logout, sesión expirada), pero no en un
+   * refresh, que mantiene al mismo usuario. Una petición emitida con otra identidad nunca se reintenta: se
+   * reenviaría, con su cuerpo, autenticada como otro usuario.
+   */
+  let identityEpoch = 0;
   let refreshInFlight: Promise<AuthResult> | null = null;
 
   const versioned = (path: string) => {
@@ -163,6 +170,7 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
 
   async function execute<S extends z.ZodType>(schema: S, call: Call): Promise<z.output<S>> {
     const generation = sessionGeneration;
+    const identity = identityEpoch;
     let res = await attempt(call);
 
     if (res.status === 401 && call.auth) {
@@ -177,6 +185,9 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
           throw error;
         }
       }
+      // Comprobación justo antes del reintento: cubre el cambio de identidad durante la petición original y
+      // durante la renovación. El 401 pertenece a la sesión con la que se construyó la petición.
+      if (identity !== identityEpoch) throw toHttpError(res);
       // Un único reintento: si vuelve a fallar se propaga, sin bucles de renovación.
       res = await attempt(call);
     }
@@ -212,7 +223,9 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
       if (generation === sessionGeneration) await persistSession(data);
       return { user: data.user };
     } catch (error) {
-      if (isSessionRejection(error)) await expireSession();
+      // Solo se expira si el rechazo corresponde a la sesión vigente: tras un logout o un login posterior, borraría
+      // los tokens nuevos y expulsaría al usuario que acaba de autenticarse.
+      if (isSessionRejection(error) && generation === sessionGeneration) await expireSession();
       throw error;
     }
   }
@@ -225,6 +238,7 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
   }
 
   async function expireSession(): Promise<void> {
+    identityEpoch++;
     try {
       await tokenStore?.clear();
     } finally {
@@ -242,6 +256,9 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
   }
 
   async function authenticate(path: '/auth/login' | '/auth/register', body: unknown): Promise<AuthResult> {
+    // Al empezar y no al guardar: en web la cookie de la sesión nueva llega con las cabeceras de la respuesta,
+    // antes de que el cliente procese el cuerpo, y una petición reintentada en ese hueco ya viajaría con ella.
+    identityEpoch++;
     const data = await execute(authResponseSchema, {
       method: 'POST',
       path: versioned(path),
@@ -249,6 +266,9 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
       auth: false,
     });
     await persistSession(data);
+    // Y también al guardar: una petición enviada mientras el login estaba en curso capturó la época ya
+    // incrementada; sin este segundo salto, su 401 se reintentaría con los tokens de la cuenta nueva.
+    identityEpoch++;
     return { user: data.user };
   }
 
@@ -256,6 +276,7 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
     // Se deja terminar una renovación en curso para revocar el token vigente y no uno ya rotado.
     await refreshInFlight?.catch(() => undefined);
     sessionGeneration++;
+    identityEpoch++;
     try {
       let body: { refreshToken?: string } = {};
       if (tokenStore) {

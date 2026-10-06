@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import type { SessionRow } from '../../database/schema/index.js';
 import type { UserCredentials, UsersService } from '../users/users.service.js';
 import { AccessTokenService } from './access-token.service.js';
-import { AuthService } from './auth.service.js';
+import { AuthService, MAX_SESSION_LIFETIME_SECONDS } from './auth.service.js';
 import { PasswordHasher } from './password-hasher.js';
 import { hashRefreshToken } from './refresh-token.js';
 import type { NewSession, SessionsRepository } from './sessions.repository.js';
@@ -191,6 +191,29 @@ describe('AuthService', () => {
       await expect(service.refresh(first.tokens.refreshToken)).rejects.toBeInstanceOf(UnauthorizedException);
       await expect(service.refresh('desconocido')).rejects.toBeInstanceOf(UnauthorizedException);
       await expect(service.refresh(undefined)).rejects.toBeInstanceOf(UnauthorizedException);
+    });
+
+    it('la familia tiene caducidad absoluta: rotar no la alarga y se copia en cada token', async () => {
+      const { service, sessions } = setup();
+      const before = Date.now();
+      const first = await service.register({ email: 'ana@rulet.app', password: PASSWORD });
+      const familyExpiresAt = sessions.rows[0]!.familyExpiresAt;
+      expect(familyExpiresAt.getTime()).toBeGreaterThanOrEqual(before + MAX_SESSION_LIFETIME_SECONDS * 1000);
+
+      // A un día del límite: el token rotado caduca con la familia, no 30 días después.
+      const limit = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      sessions.rows[0]!.familyExpiresAt = limit;
+      const second = await service.refresh(first.tokens.refreshToken);
+      expect(sessions.rows[1]?.familyExpiresAt).toEqual(limit);
+      expect(sessions.rows[1]?.expiresAt).toEqual(limit);
+      expect(second.tokens.refreshTokenExpiresAt).toBe(limit.toISOString());
+    });
+
+    it('superada la caducidad absoluta de la familia → 401 aunque el token no haya caducado', async () => {
+      const { service, sessions } = setup();
+      const first = await service.register({ email: 'ana@rulet.app', password: PASSWORD });
+      sessions.rows[0]!.familyExpiresAt = new Date(Date.now() - 1000);
+      await expect(service.refresh(first.tokens.refreshToken)).rejects.toBeInstanceOf(UnauthorizedException);
     });
 
     it('el access token nuevo lleva el rol actual del usuario', async () => {

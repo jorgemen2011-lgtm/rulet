@@ -30,8 +30,9 @@ export async function resetDatabase(app: NestExpressApplication): Promise<void> 
 let ipCounter = 0;
 
 /**
- * Cada cliente simula una IP distinta (vía `X-Forwarded-For`, con `trust proxy` = 1) para que el
- * rate limiting por IP de un test no afecte a los demás.
+ * Cada cliente simula una IP distinta (vía `X-Forwarded-For`, que se acepta porque supertest conecta desde
+ * loopback y TRUST_PROXY vale `loopback` fuera de producción) para que el rate limiting por IP de un test
+ * no afecte a los demás.
  */
 function nextIp(): string {
   ipCounter += 1;

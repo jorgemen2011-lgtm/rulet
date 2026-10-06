@@ -9,6 +9,7 @@ import { RolesGuard } from './common/guards/roles.guard.js';
 import { AppConfigService } from './config/app-config.service.js';
 import { AppConfigModule } from './config/config.module.js';
 import { DatabaseModule } from './database/database.module.js';
+import { accountThrottler } from './modules/auth/account-throttler.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { HealthModule } from './modules/health/health.module.js';
 import { UsersModule } from './modules/users/users.module.js';
@@ -17,10 +18,14 @@ import { UsersModule } from './modules/users/users.module.js';
   imports: [
     AppConfigModule,
     DatabaseModule,
+    // Contadores en memoria (por proceso): con varias réplicas cada una cuenta por separado y el límite real
+    // se multiplica por su número. Para escalar en horizontal hace falta un `storage` compartido (p. ej. Redis).
     ThrottlerModule.forRootAsync({
       inject: [AppConfigService],
       useFactory: (config: AppConfigService) => [
+        // `default`: por IP, en todas las rutas. `account`: por cuenta, solo donde se pide (`@ThrottleByAccount`).
         { ttl: config.get('THROTTLE_TTL_MS'), limit: config.get('THROTTLE_LIMIT') },
+        accountThrottler,
       ],
     }),
     // Módulos de dominio: uno por carpeta en src/modules.

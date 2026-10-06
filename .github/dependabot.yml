@@ -23,7 +23,9 @@ updates:
     groups:
       actions: { patterns: ['*'] }
 
-  # Imágenes base de los Dockerfile (node:24-alpine).
+  # Imágenes base de los Dockerfile (node:24-alpine), fijadas por digest: Dependabot propone el digest nuevo
+  # (y el tag si cambia). No toca la directiva `# syntax=docker/dockerfile:1@sha256:…`: se actualiza a mano con
+  #   docker buildx imagetools inspect docker/dockerfile:1 --format '{{.Manifest.Digest}}'
   - package-ecosystem: docker
     directories: [/apps/api, /apps/web]
     schedule: { interval: weekly }

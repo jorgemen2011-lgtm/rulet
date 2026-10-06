@@ -36,3 +36,7 @@ test/                    Tests e2e (supertest)
 | `GET /health` | Sonda de salud (no versionada, sin rate limit) |
 
 Despliegue: ver [docs/environments.md](../../docs/environments.md#api--contenedor).
+
+En producción la API no arranca sin `TRUST_PROXY` (proxies delante de la API, o `false` si recibe tráfico
+directo) ni `CORS_ORIGINS` explícitos, y rechaza los secretos JWT de ejemplo o de desarrollo y los parámetros
+TLS en `DATABASE_URL`. Ver `.env.example`. Las migraciones se aplican con `node dist/database/migrate.js`.
